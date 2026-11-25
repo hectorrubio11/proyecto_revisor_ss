@@ -1,4 +1,6 @@
 import asyncio
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from models.esquemas import DictamenIFRSS
@@ -13,20 +15,27 @@ app = FastAPI(
     version="0.2.0",
 )
 
+BASE_DIR = Path(__file__).resolve().parent
+IMG_DIR = BASE_DIR / "img"
+if IMG_DIR.is_dir():
+    app.mount("/img", StaticFiles(directory=str(IMG_DIR)), name="img")
 HTML_UI = """<!DOCTYPE html>
+
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Revisor Servicio Social — FIMAZ</title>
+  <title>Revisor de Documentos de Servicio Social — UAS / FIMAZ</title>
   <style>
     :root {
+      --azul-uas: #0a2b57;
+      --azul-uas-hover: #071e3d;
+      --oro-uas: #b58d2c;
       --bg: #f4f6f9;
       --card: #ffffff;
       --text: #1e293b;
       --muted: #64748b;
-      --border: #e2e8f0;
-      --accent: #0f4c81;
+      --border: #d1d5db;
       --ok-bg: #dcfce7;
       --ok-border: #16a34a;
       --ok-text: #14532d;
@@ -34,57 +43,348 @@ HTML_UI = """<!DOCTYPE html>
       --warn-border: #d97706;
       --warn-text: #78350f;
     }
-    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-    body { margin: 0; background: var(--bg); color: var(--text); padding: 2rem 1rem; }
-    .container { max-width: 780px; margin: 0 auto; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 1.25rem; }
-    h1 { margin: 0 0 0.25rem; font-size: 1.5rem; color: var(--accent); }
-    p.sub { margin: 0 0 1.25rem; color: var(--muted); font-size: 0.95rem; }
-    .form-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
-    select { padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; color: var(--text); font-size: 0.95rem; }
-    input[type="file"] { flex: 1; min-width: 220px; padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; }
-    button { background: var(--accent); color: #fff; border: none; padding: 0.65rem 1.25rem; border-radius: 8px; font-weight: 600; cursor: pointer; }
-    button:hover { opacity: 0.92; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    #estado-tiempo { color: var(--muted); font-size: 0.9rem; }
-    .banner { padding: 1rem 1.2rem; border-radius: 10px; border-left: 5px solid; font-weight: 600; margin-bottom: 1rem; }
-    .banner.cumple { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok-text); }
-    .banner.observaciones { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
-    .stat { border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; background: #f8fafc; }
-    .stat small { display: block; color: var(--muted); margin-bottom: 0.2rem; }
-    ul { margin: 0.4rem 0 0; padding-left: 1.2rem; }
-    li { margin-bottom: 0.35rem; }
-    #resultado { display: none; }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .topbar {
+      background: var(--azul-uas);
+      border-bottom: 3px solid var(--oro-uas);
+      color: #ffffff;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .topbar-left,
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .topbar-center {
+      text-align: center;
+      flex: 1;
+    }
+
+    .topbar-title {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .topbar-subtitle {
+      margin: 2px 0 0;
+      font-size: 0.8rem;
+      color: #dbeafe;
+    }
+
+    .logo-uas {
+      height: 44px;
+      width: auto;
+      object-fit: contain;
+    }
+
+    .logo-der {
+      height: 42px;
+      width: auto;
+      object-fit: contain;
+      background: #ffffff;
+      padding: 3px 6px;
+      border-radius: 4px;
+    }
+
+    .main-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 780px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid #e2e8f0;
+      border-top: 4px solid var(--oro-uas);
+      border-radius: 10px;
+      padding: 1.5rem 1.75rem;
+      box-shadow: 0 8px 24px rgba(10, 43, 87, 0.08);
+      margin-bottom: 1.25rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.15rem;
+    }
+
+    .form-label {
+      display: block;
+      font-weight: 700;
+      font-size: 0.92rem;
+      margin-bottom: 0.45rem;
+      color: var(--text);
+    }
+
+    .sub {
+      margin: 0.35rem 0 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    select.form-select {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+
+    .file-input-hidden {
+      display: none;
+    }
+
+    .file-picker {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #ffffff;
+    }
+
+    .file-btn {
+      background: #f3f4f6;
+      color: var(--text);
+      border: none;
+      border-right: 1px solid var(--border);
+      padding: 0.6rem 0.95rem;
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .file-btn:hover {
+      background: #e5e7eb;
+    }
+
+    .file-name {
+      padding: 0.6rem 0.85rem;
+      font-size: 0.88rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .help-text {
+      margin: 0.35rem 0 0;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .action-row {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+
+    button.btn-submit {
+      flex: 1;
+      min-width: 180px;
+      background: var(--azul-uas);
+      color: #ffffff;
+      border: none;
+      padding: 0.7rem 1.25rem;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.btn-submit:hover {
+      background: var(--azul-uas-hover);
+    }
+
+    button.btn-submit:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    #estado-tiempo {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .banner {
+      padding: 1rem 1.2rem;
+      border-radius: 8px;
+      border-left: 5px solid;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .banner.cumple {
+      background: var(--ok-bg);
+      border-color: var(--ok-border);
+      color: var(--ok-text);
+    }
+
+    .banner.observaciones {
+      background: var(--warn-bg);
+      border-color: var(--warn-border);
+      color: var(--warn-text);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .stat {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.75rem;
+      background: #f8fafc;
+    }
+
+    .stat small {
+      display: block;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+    }
+
+    ul {
+      margin: 0.4rem 0 0;
+      padding-left: 1.2rem;
+    }
+
+    li {
+      margin-bottom: 0.35rem;
+    }
+
+    #resultado {
+      display: none;
+    }
+
+    .footer-text {
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      .topbar {
+        padding: 10px 12px;
+      }
+      .topbar-title {
+        font-size: 1rem;
+      }
+      .topbar-subtitle {
+        font-size: 0.72rem;
+      }
+      .logo-izq,
+      .logo-der {
+        height: 34px;
+      }
+      .card {
+        padding: 1.2rem 1rem;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="card">
-      <h1>Revisor IFRSS — UAS</h1>
-      <p id="subtitulo" class="sub">Validación de estructura, extensión, tipografía y elementos visuales.</p>
-      <form id="form-ifrss" class="form-row">
-        <select id="tipo-documento" name="tipo_documento" aria-label="Tipo de documento">
-          <option value="ifrss" selected>Informe Final</option>
-          <option value="carta_asignacion">Carta de Asignación</option>
-        </select>
-        <input type="file" id="archivo" name="archivo" accept="application/pdf,.pdf" required />
-        <button type="submit" id="btn-enviar">Revisar PDF</button>
-        <span id="estado-tiempo"></span>
-      </form>
+  <header class="topbar">
+    <div class="topbar-left">
+      <img src="img/Logo_Uas.svg.webp" alt="Escudo UAS" class="logo-uas" />
     </div>
 
-    <div id="resultado" class="card">
-      <div id="banner" class="banner"></div>
-      <div class="grid" id="metricas"></div>
-      <div>
-        <strong>Observaciones y detalles</strong>
-        <ul id="lista-obs"></ul>
-      </div>
+    <div class="topbar-center">
+      <h1 class="topbar-title">Revisor de Documentos de Servicio Social</h1>
+      <p class="topbar-subtitle">Universidad Autónoma de Sinaloa · Facultad de Informática Mazatlán</p>
     </div>
-  </div>
+
+    <div class="topbar-right">
+      <!-- Pon aquí las imágenes derechas -->
+      <img src="img/Uas_logo.jpg" alt="Logo UAS" class="logo-der" />
+      <img src="img/fimaz-color.png" alt="Logo FIMAZ" class="logo-der" />
+    </div>
+  </header>
+
+  <main class="main-wrap">
+    <div class="container">
+      <div class="card">
+        <form id="form-ifrss">
+          <div class="form-group">
+            <label for="tipo-documento" class="form-label">¿Qué documento quieres revisar?</label>
+            <select id="tipo-documento" name="tipo_documento" class="form-select" aria-label="Tipo de documento">
+              <option value="ifrss" selected>Informe Final IFRSS</option>
+              <option value="carta_asignacion">Carta de Asignación</option>
+            </select>
+            <p id="subtitulo" class="sub">Validación de estructura, extensión, tipografía y elementos visuales.</p>
+          </div>
+
+          <div class="form-group">
+            <label for="archivo" class="form-label">Documento a revisar (PDF)</label>
+            <input type="file" id="archivo" name="archivo" accept="application/pdf,.pdf" class="file-input-hidden" required />
+            <div class="file-picker">
+              <button type="button" id="btn-seleccionar" class="file-btn">Seleccionar archivo</button>
+              <span id="nombre-archivo" class="file-name">Ningún archivo seleccionado</span>
+            </div>
+            <p class="help-text">Solo PDF, máximo 10 MB.</p>
+          </div>
+
+          <div class="action-row">
+            <button type="submit" id="btn-enviar" class="btn-submit">Revisar documento</button>
+            <span id="estado-tiempo"></span>
+          </div>
+        </form>
+      </div>
+
+      <div id="resultado" class="card">
+        <div id="banner" class="banner"></div>
+        <div class="grid" id="metricas"></div>
+        <div>
+          <strong>Observaciones y detalles</strong>
+          <ul id="lista-obs"></ul>
+        </div>
+      </div>
+
+      <footer class="footer-text">
+        Universidad Autónoma de Sinaloa · FIMAZ
+      </footer>
+    </div>
+  </main>
 
   <script>
+    const MAX_BYTES = 10 * 1024 * 1024;
     const ENDPOINTS = {
       ifrss: "/revisar-ifrss",
       carta_asignacion: "/revisar-carta-asignacion",
@@ -92,12 +392,15 @@ HTML_UI = """<!DOCTYPE html>
 
     const SUBTITULOS = {
       ifrss: "Validación de estructura, extensión, tipografía y elementos visuales.",
-      carta_asignacion: "Revisión de 1 sola hoja: presencia de firma y calidad/legibilidad del escaneo.",
+      carta_asignacion: "Revisión de 1 sola hoja, tamaño regular, presencia de firma y calidad/legibilidad del escaneo.",
     };
 
     const form = document.getElementById("form-ifrss");
     const tipoDoc = document.getElementById("tipo-documento");
     const subtitulo = document.getElementById("subtitulo");
+    const inputArchivo = document.getElementById("archivo");
+    const btnSeleccionar = document.getElementById("btn-seleccionar");
+    const spanNombre = document.getElementById("nombre-archivo");
     const btn = document.getElementById("btn-enviar");
     const estadoTiempo = document.getElementById("estado-tiempo");
     const resBox = document.getElementById("resultado");
@@ -109,10 +412,37 @@ HTML_UI = """<!DOCTYPE html>
       subtitulo.textContent = SUBTITULOS[tipoDoc.value] || SUBTITULOS.ifrss;
     });
 
+    btnSeleccionar.addEventListener("click", () => inputArchivo.click());
+
+    inputArchivo.addEventListener("change", () => {
+      const file = inputArchivo.files[0];
+      spanNombre.textContent = file ? file.name : "Ningún archivo seleccionado";
+    });
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const input = document.getElementById("archivo");
-      if (!input.files.length) return;
+      if (!inputArchivo.files.length) return;
+
+      const file = inputArchivo.files[0];
+      if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+        resBox.style.display = "block";
+        banner.className = "banner observaciones";
+        banner.textContent = "Error: Solo se permiten archivos en formato PDF.";
+        metricas.innerHTML = "";
+        listaObs.innerHTML = "";
+        estadoTiempo.textContent = "";
+        return;
+      }
+
+      if (file.size > MAX_BYTES) {
+        resBox.style.display = "block";
+        banner.className = "banner observaciones";
+        banner.textContent = "Error: El archivo supera el límite máximo de 10 MB.";
+        metricas.innerHTML = "";
+        listaObs.innerHTML = "";
+        estadoTiempo.textContent = "";
+        return;
+      }
 
       const tipo = tipoDoc.value;
       const endpoint = ENDPOINTS[tipo] || ENDPOINTS.ifrss;
@@ -137,7 +467,7 @@ HTML_UI = """<!DOCTYPE html>
       const timer = setTimeout(() => controller.abort(), 60000);
 
       const fd = new FormData();
-      fd.append("archivo", input.files[0]);
+      fd.append("archivo", file);
 
       try {
         const resp = await fetch(endpoint, {
@@ -211,7 +541,7 @@ HTML_UI = """<!DOCTYPE html>
         resBox.style.display = "block";
       } finally {
         btn.disabled = false;
-        btn.textContent = "Revisar PDF";
+        btn.textContent = "Revisar documento";
       }
     });
   </script>
